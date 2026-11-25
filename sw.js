@@ -1,4 +1,4 @@
-const CACHE = "xianTu-shell-v1";
+const CACHE = "xianTu-shell-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -27,7 +27,14 @@ self.addEventListener("fetch", event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   event.respondWith(
-    caches.match(request).then(cached => cached || fetch(request).catch(() => {
+    fetch(request).then(response => {
+      if (response && response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(request, copy));
+      }
+      return response;
+    }).catch(() => caches.match(request).then(cached => {
+      if (cached) return cached;
       if (request.mode === "navigate") return caches.match("./index.html");
       return new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }))

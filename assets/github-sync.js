@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  try {
 
   const CONFIG_KEY = "xianTu.githubSync.v1";
   const API_BASE = localStorage.getItem("xianTu.githubApiBase") || "https://api.github.com";
@@ -394,4 +395,11 @@
   }
 
   window.XIANTU_GITHUB_SYNC = { syncNow, pull, push, config: () => ({ ...config, token: config.token ? "***" : "" }) };
+  window.setTimeout(() => {
+    renderCard();
+    refreshStatus();
+  }, 0);
+  } catch (error) {
+    document.documentElement.dataset.githubSyncError = String(error && error.stack || error);
+  }
 })();

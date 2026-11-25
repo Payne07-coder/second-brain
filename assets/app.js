@@ -22,6 +22,7 @@
     recall: ["主动回忆", "ACTIVE RECALL"],
     goals: ["目标推进", "GOAL BOARD"],
     options: ["路径选项", "PATH OPTIONS"],
+    mirror: ["客观评价", "OBJECTIVE MIRROR"],
     review: ["复盘中心", "REVIEW CENTER"],
     selfcheck: ["自我审视", "SELF-OBSERVATION"],
     settings: ["数据与隐私", "LOCAL DATA"]
@@ -218,7 +219,7 @@
     const batches = Array.isArray(window.XIANTU_SYNC_BATCHES) ? window.XIANTU_SYNC_BATCHES : [];
     current.syncedBatchIds = Array.isArray(current.syncedBatchIds) ? current.syncedBatchIds : [];
     current.syncLogs = Array.isArray(current.syncLogs) ? current.syncLogs : [];
-    const collections = ["decisions", "events", "resumeItems", "notes", "goals", "options", "reviews", "checkins", "deepReflections"];
+  const collections = ["decisions", "events", "resumeItems", "notes", "goals", "options", "evaluations", "reviews", "checkins", "deepReflections"];
     for (const batch of batches) {
       if (!batch || !batch.id || current.syncedBatchIds.includes(batch.id)) continue;
       for (const collection of collections) {
@@ -1673,6 +1674,109 @@
       </div>`;
   }
 
+  function renderMirror() {
+    const today = todayIso();
+    const ago = days => {
+      const d = new Date();
+      d.setDate(d.getDate() - days);
+      return d.toISOString().slice(0, 10);
+    };
+    const recent = ago(30);
+    const goals = state.goals || [];
+    const options = state.options || [];
+    const decisions = state.decisions || [];
+    const notes = state.notes || [];
+    const events = state.events || [];
+    const active = goals.filter(item => item.status !== "已完成");
+    const overdue = active.filter(item => item.reviewDate && item.reviewDate <= today);
+    const done = goals.filter(item => item.status === "已完成");
+    const completion = goals.length ? Math.round(done.length / goals.length * 100) : 0;
+    const reviewed = decisions.filter(item => item.status === "已复盘");
+    const pendingReview = decisions.length - reviewed.length;
+    const scored = reviewed.filter(item => Number(item.outcome) > 0);
+    const avgScore = scored.length ? scored.reduce((sum, item) => sum + Number(item.outcome), 0) / scored.length : 0;
+    const lowScore = reviewed.filter(item => Number(item.outcome) > 0 && Number(item.outcome) <= 2).length;
+    const expiring = options.filter(item => (String(item.expires || "").match(/20\d{2}/g) || []).some(year => Number(year) <= new Date().getFullYear() + 2));
+    const newNotes = notes.filter(item => String(item.createdAt || "").slice(0, 10) >= recent);
+    const newEvents = events.filter(item => String(item.createdAt || item.updatedAt || "").slice(0, 10) >= recent);
+    const healthEvents = events.filter(item => item.type === "健康").length;
+    const recentCheckins = (state.checkins || []).filter(item => String(item.date || "") >= recent).length;
+    const socialGoal = goals.find(item => String(item.title).includes("社交"));
+    const socialProgress = socialGoal ? toNumber(socialGoal.progress) : null;
+
+    const signals = [];
+    const push = (level, text) => signals.push({ level, text });
+    if (scored.length >= 5 && lowScore === 0) push("warn", `已复盘的 ${scored.length} 个决策，没有一个低于 3 分。要么你确实全胜，要么你在挑着记。`);
+    else if (lowScore > 0) push("good", `复盘里有 ${lowScore} 条低分记录——系统能容得下失败，这是好事。`);
+    if (overdue.length) push("warn", `有 ${overdue.length} 项任务过了检查日还没更新，进度条已经不代表真实状态。`);
+    else push("good", "没有逾期未更新的任务，承诺和记录还对得上。");
+    if (active.length > 6) push("warn", `同时在推进 ${active.length} 件事。超过 6 件，基本等于没有重点。`);
+    if (expiring.length) push("warn", `有 ${expiring.length} 个选项两年内到期，不判断就会自动作废。`);
+    if (newNotes.length < 2) push("warn", `近 30 天只新增 ${newNotes.length} 条知识：你在忙事，但没在长脑子。`);
+    else push("good", `近 30 天新增 ${newNotes.length} 条知识，输入还在。`);
+    if (pendingReview > 2) push("warn", `有 ${pendingReview} 个决策没复盘，等于做了但没学到。`);
+    if (healthEvents === 0 && recentCheckins === 0) push("warn", "健康类记录和状态检查都是 0：身体还没进入你的评估系统。");
+    if (socialProgress !== null && socialProgress < 30) push("warn", `社交目标只推进了 ${socialProgress}%：这是你长期没动的短板。`);
+    if (newEvents.length >= 3) push("good", `近 30 天有 ${newEvents.length} 条新事件，节奏是活的。`);
+
+    const gaps = [];
+    if (lowScore === 0) gaps.push("没有一条失败或判断失误的记录");
+    if (healthEvents === 0) gaps.push("没有健康类事件（睡眠、伤病、体重、疲劳）");
+    if (recentCheckins === 0) gaps.push("近 30 天没有状态检查记录");
+    if (!options.length) gaps.push("没有路径选项，等于没给自己留余地");
+
+    const evals = [...(state.evaluations || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const evalCards = evals.length ? evals.map(item => `
+      <article class="goal-card">
+        <div class="goal-head">
+          <div>
+            <div class="record-meta"><span class="type-pill">AI 评语</span><span class="tag">${escapeHtml(item.date || "")}</span></div>
+            <h3>${escapeHtml(item.title || "状态评估")}</h3>
+          </div>
+        </div>
+        <p>${escapeHtml(item.verdict || "")}</p>
+        ${Array.isArray(item.evidence) && item.evidence.length ? `<div style="margin:6px 0 2px"><label style="font-size:8.5pt;color:#6f695d">依据</label><div style="font-size:9pt;line-height:1.6">${item.evidence.map(text => escapeHtml(text)).join("<br>")}</div></div>` : ""}
+        <div class="goal-details">
+          <div><label>风险</label><span>${escapeHtml(item.risk || "—")}</span></div>
+          <div><label>下一步</label><span>${escapeHtml(item.nextStep || "—")}</span></div>
+        </div>
+      </article>`).join("") : `<div class="empty-state"><div class="empty-mark"><svg class="icon"><use href="#i-info"></use></svg></div><h4>还没有评语</h4><p>每次对话结束后，Codex 会把一段不带客气的评估写进这里。</p></div>`;
+
+    const signalRows = signals.map(item => `
+      <div style="display:flex;gap:9px;padding:7px 0;border-bottom:1px solid rgba(27,26,23,.1);font-size:9.3pt;line-height:1.55">
+        <span style="flex:0 0 auto;width:6px;height:6px;border-radius:50%;margin-top:6px;background:${item.level === "warn" ? "#d1503a" : "#3f7a5c"}"></span>
+        <span>${escapeHtml(item.text)}</span>
+      </div>`).join("");
+
+    $("#pageContent").innerHTML = `
+      <div class="page-enter">
+        ${pageHeader("OBJECTIVE MIRROR", "客观评价", "这一页不对你客气。它只读你自己的记录，把前后不一致的地方标出来，判断标准写在下面，你可以反驳。")}
+        <section class="metric-grid">
+          <article class="metric-card"><div class="metric-label">近 30 天入库</div><div class="metric-value">${newEvents.length + newNotes.length}</div><div class="metric-note">事件 ${newEvents.length} + 知识 ${newNotes.length}（含批量同步）</div></article>
+          <article class="metric-card"><div class="metric-label">待复盘决策</div><div class="metric-value">${pendingReview}</div><div class="metric-note">做了但还没回头看的</div></article>
+          <article class="metric-card"><div class="metric-label">逾期未更新</div><div class="metric-value">${overdue.length}</div><div class="metric-note">过了检查日仍停在原状态</div></article>
+          <article class="metric-card"><div class="metric-label">目标完成率</div><div class="metric-value">${completion}%</div><div class="metric-note">已完成 ${done.length} / 共 ${goals.length}</div></article>
+          <article class="metric-card"><div class="metric-label">决策自评均分</div><div class="metric-value">${avgScore ? avgScore.toFixed(1) : "—"}</div><div class="metric-note">低分记录 ${lowScore} 条</div></article>
+          <article class="metric-card"><div class="metric-label">两年内到期选项</div><div class="metric-value">${expiring.length}</div><div class="metric-note">过期即作废</div></article>
+        </section>
+        <p style="font-size:8.2pt;color:#6f695d;margin-top:6px">新建档或批量同步会让“近 30 天”虚高；这项指标只看趋势，不看绝对值。</p>
+        <div class="cols" style="display:grid;grid-template-columns:1.45fr 1fr;gap:14px;margin-top:14px">
+          <article class="panel">
+            <div class="panel-title"><svg class="icon"><use href="#i-info"></use></svg><h3>读数（按规则生成）</h3></div>
+            ${signalRows}
+            <p style="font-size:8.4pt;color:#6f695d;margin-top:8px">红点＝需要处理；绿点＝目前正常。读数只依据本库记录，不包含没写进来的事。</p>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><svg class="icon"><use href="#i-search"></use></svg><h3>数据缺口</h3></div>
+            ${gaps.length ? gaps.map(text => `<div style="font-size:9pt;line-height:1.6;padding:5px 0;border-bottom:1px solid rgba(27,26,23,.1)">· ${escapeHtml(text)}</div>`).join("") : `<p style="font-size:9pt">关键维度都有记录，这份评估的可信度较高。</p>`}
+            <p style="font-size:8.4pt;color:#6f695d;margin-top:8px">缺什么，评估就会偏什么。补记录比改结论重要。</p>
+          </article>
+        </div>
+        <h2 style="margin:18px 0 10px;font-size:11pt">AI 评语</h2>
+        <div class="goal-grid">${evalCards}</div>
+      </div>`;
+  }
+
   function renderOptions() {
     const items = [...(state.options || [])];
     const locked = items.filter(item => item.state === "已锁定");
@@ -1964,6 +2068,7 @@
     if (currentPage === "recall") renderRecall();
     if (currentPage === "goals") renderGoals();
     if (currentPage === "options") renderOptions();
+    if (currentPage === "mirror") renderMirror();
     if (currentPage === "review") renderReviewCenter();
     if (currentPage === "selfcheck") renderSelfCheck();
     if (currentPage === "settings") renderSettings();
