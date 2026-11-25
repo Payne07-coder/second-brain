@@ -1,0 +1,1 @@
+window.XIANTU_SYNC_BATCHES = [];

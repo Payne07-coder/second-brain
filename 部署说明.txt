@@ -1,0 +1,16 @@
+弦图 GitHub Pages 部署
+
+1. 新建一个公开仓库，例如 second-brain（只放本目录里的网页文件）。
+2. 把本目录（github-pages）里的全部文件上传到仓库根目录。
+3. 在仓库 Settings → Pages 中选择 Deploy from a branch，分支 main，目录 / (root)，保存。
+4. 打开 https://<你的用户名>.github.io/second-brain/。
+5. 在“数据与隐私 → GitHub 云同步”里填写：
+   - GitHub 用户名
+   - 私有数据仓库名，例如 second-brain-data
+   - 分支 main
+   - 文件路径 data.json
+   - fine-grained token（只给私有数据仓库 Contents 读写）
+6. 电脑先点“上传到云端”，手机打开同一网页后点“从云端拉取”。
+7. iPhone Safari 分享 → 添加到主屏幕，以后可独立打开。
+
+注意：网页仓库只放代码，不放个人数据；数据只放在私有仓库里。
