@@ -68,13 +68,13 @@
   function meaningful(data) {
     if (!data || typeof data !== "object") return false;
     if (data.profile && data.profile.name && data.profile.name !== "你的名字") return true;
-    return ["decisions", "events", "resumeItems", "notes", "goals", "options", "reviews", "checkins", "deepReflections"]
+    return ["decisions", "events", "resumeItems", "notes", "goals", "options", "evaluations", "reviews", "checkins", "deepReflections"]
       .some(key => Array.isArray(data[key]) && data[key].length > 0);
   }
 
   function score(data) {
     if (!data || typeof data !== "object") return 0;
-    return ["decisions", "events", "resumeItems", "notes", "goals", "options", "reviews", "checkins", "deepReflections"]
+    return ["decisions", "events", "resumeItems", "notes", "goals", "options", "evaluations", "reviews", "checkins", "deepReflections"]
       .reduce((sum, key) => sum + (Array.isArray(data[key]) ? data[key].length : 0), 0);
   }
 
